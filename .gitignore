@@ -56,3 +56,5 @@ logs/
 .DS_Store
 Thumbs.db
 
+# Python environments
+.python-version
