@@ -1,0 +1,58 @@
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+.Python
+env/
+venv/
+.venv/
+ENV/
+pip-wheel-metadata/
+.DS_Store
+
+# Poetry
+poetry.lock # Usually committed, but can be ignored in some workflows.
+            # For collaborative projects, it's better to commit it.
+            # For libraries, it's often ignored.
+            # For applications like this, committing it ensures reproducible environments.
+            # Let's assume we commit it for now. If you prefer to ignore, uncomment.
+.pdm.toml
+.pdm.lock
+pdm.lock
+
+# IDEs and editors
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment variables
+.env
+.env.*
+!/.env.example # Make sure .env.example IS tracked
+
+# Test artifacts
+.pytest_cache/
+coverage.xml
+.coverage
+htmlcov/
+
+# Build artifacts
+dist/
+build/
+*.egg
+
+# Logs
+*.log
+logs/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# OS specific
+.DS_Store
+Thumbs.db
+

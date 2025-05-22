@@ -1,0 +1,54 @@
+[tool.poetry]
+name = "evocoder"
+version = "0.1.0"
+description = "An AI agent inspired by AlphaEvolve to iteratively evolve code solutions using LLMs."
+authors = ["Your Name <you@example.com>"] # Replace with your details
+readme = "README.md"
+license = "MIT" # Or your preferred license
+packages = [{include = "evocoder", from = "."}] # Tells Poetry where the main package is
+
+[tool.poetry.dependencies]
+python = "^3.12" # Specifies Python 3.12 or newer
+python-dotenv = "^1.0.0" # For loading .env files
+httpx = "^0.27.0" # For making HTTP requests (to Open WebUI API)
+typer = {extras = ["all"], version = "^0.12.3"} # For creating a nice CLI
+# asyncio is part of the standard library
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0.0" # For running tests
+pytest-asyncio = "^0.23.0" # For testing asyncio code with pytest
+pytest-cov = "^5.0.0" # For test coverage reports
+ruff = "^0.4.0" # For linting and formatting (optional but highly recommended)
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+pythonpath = [".", "evocoder"] # Ensures pytest can find your evocoder package
+asyncio_mode = "auto" # Recommended for pytest-asyncio
+
+[tool.ruff]
+# Ruff is a very fast Python linter and formatter, combining tools like Flake8, isort, Black, etc.
+# This is a basic configuration. You can customize it extensively.
+line-length = 88
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # Pyflakes
+    "I",  # isort (import sorting)
+    "C",  # McCabe complexity
+    "B",  # flake8-bugbear
+]
+ignore = [
+    "E501", # Line too long (handled by formatter if you use one like Black or Ruff's own formatter)
+]
+
+[tool.ruff.format]
+# If you want Ruff to also format your code (like Black)
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+
