@@ -1,9 +1,9 @@
 # evocoder/config/settings.py
 
 import os
-from typing import Any, Optional
 from dotenv import load_dotenv
 from pathlib import Path
+from typing import Optional, Any # Added Optional, Any
 
 # Determine the project root directory.
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent 
@@ -21,30 +21,24 @@ OPEN_WEBUI_API_KEY: Optional[str] = os.getenv("OPEN_WEBUI_API_KEY")
 OPEN_WEBUI_BASE_URL: Optional[str] = os.getenv("OPEN_WEBUI_BASE_URL")
 OPEN_WEBUI_MODEL_NAME: Optional[str] = os.getenv("OPEN_WEBUI_MODEL_NAME")
 
-# Google Gemini API Settings (NEW)
+# Google Gemini API Settings
 GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY")
-GEMINI_MODEL_NAME: Optional[str] = os.getenv("GEMINI_MODEL_NAME", "gemini-1.5-pro-latest") # Default if not in .env
-# Optional: Gemini Safety Settings (can be a JSON string or loaded differently)
-# Example: "BLOCK_MEDIUM_AND_ABOVE" for HARM_CATEGORY_HARASSMENT, etc.
-# For simplicity, we'll assume it's None or handled by the provider if not set.
+GEMINI_MODEL_NAME: Optional[str] = os.getenv("GEMINI_MODEL_NAME", "gemini-1.5-pro-latest") 
 GEMINI_SAFETY_SETTINGS: Optional[Any] = os.getenv("GEMINI_SAFETY_SETTINGS", None) 
 
 
-# --- Default LLM Configuration (can be overridden by experiment configs later) ---
+# --- Default LLM Configuration ---
 DEFAULT_LLM_PROVIDER: str = os.getenv("DEFAULT_LLM_PROVIDER", "open_webui")
 
 # --- General Application Settings ---
 LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO").upper()
+# NEW: Define a path for a global log file, can be overridden by logger setup
+LOG_FILE_PATH: Optional[str] = os.getenv("LOG_FILE_PATH", None) # Example: "data/evocoder_app.log"
 
 
 # --- Validation (Optional but Recommended) ---
-# This section can be expanded as more providers are added.
-# For now, it just prints warnings if default provider settings are missing.
 if DEFAULT_LLM_PROVIDER == "open_webui":
-    if not OPEN_WEBUI_API_KEY and OPEN_WEBUI_BASE_URL != "http://localhost:8080": # Example: local might not need key
-        # Adjust condition if your specific OpenWebUI needs a key
-        # print("Warning: OPEN_WEBUI_API_KEY is not set in .env or environment variables for non-default local URL.")
-        pass # API key might be optional for some OpenWebUI setups
+    # API key might be optional for some OpenWebUI setups, so no strict check here unless base_url is not localhost
     if not OPEN_WEBUI_BASE_URL:
         print("Warning: OPEN_WEBUI_BASE_URL is not set in .env or environment variables.")
     if not OPEN_WEBUI_MODEL_NAME:
@@ -52,12 +46,10 @@ if DEFAULT_LLM_PROVIDER == "open_webui":
 elif DEFAULT_LLM_PROVIDER == "gemini":
     if not GEMINI_API_KEY:
         print("Warning: GEMINI_API_KEY is not set in .env or environment variables for Gemini provider.")
-    if not GEMINI_MODEL_NAME:
-        print("Warning: GEMINI_MODEL_NAME is not set for Gemini provider (will use default).")
+    # GEMINI_MODEL_NAME has a default, so no warning if not set.
 
 
 if __name__ == "__main__":
-    # Quick test to see if variables are loaded
     print(f"Project Root: {PROJECT_ROOT}")
     print(f"Dotenv Path: {DOTENV_PATH}")
     print(f"--- OpenWebUI Config ---")
@@ -71,4 +63,5 @@ if __name__ == "__main__":
     print(f"--- General Config ---")
     print(f"  Default LLM Provider: {DEFAULT_LLM_PROVIDER}")
     print(f"  Log Level: {LOG_LEVEL}")
+    print(f"  Log File Path: {LOG_FILE_PATH}") # NEW print for testing
 
