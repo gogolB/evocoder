@@ -19,22 +19,49 @@ except ImportError:
     else:
         raise
 
+
+# A registry to map provider names (from config) to their classes
+# This allows for easy extension with new providers.
 PROVIDER_REGISTRY: Dict[str, str] = {
     "open_webui": "evocoder.llm_interface.providers.open_webui_provider.OpenWebUIProvider",
+    "gemini": "evocoder.llm_interface.providers.gemini_provider.GeminiProvider", # ADDED THIS LINE
+    # Add other providers here as they are implemented, e.g.:
+    # "ollama_direct": "evocoder.llm_interface.providers.ollama_provider.OllamaProvider",
 }
 
 class LLMManager:
     """
     Manages the instantiation and interaction with a configured LLM provider.
+    This class acts as a factory and a unified interface for LLM operations.
     """
 
     def __init__(self, provider_name: Optional[str] = None, llm_config: Optional[Dict[str, Any]] = None):
+        """
+        Initializes the LLMManager.
+
+        It will select and instantiate an LLM provider based on the provided
+        `provider_name` or the `DEFAULT_LLM_PROVIDER` from settings.
+        Provider-specific configurations are also loaded from settings.
+
+        Args:
+            provider_name (Optional[str]): The name of the LLM provider to use (e.g., "open_webui", "gemini").
+                                           If None, uses DEFAULT_LLM_PROVIDER from settings.
+            llm_config (Optional[Dict[str, Any]]): A dictionary containing specific configurations
+                                                   for the LLM provider (e.g., api_key, base_url, model_name).
+                                                   If None, attempts to load from global settings.
+        
+        Raises:
+            ValueError: If the specified provider is not supported or configuration is missing.
+            ImportError: If the provider class cannot be imported.
+        """
         self.provider_name = provider_name or settings.DEFAULT_LLM_PROVIDER
         self.llm_config = llm_config if llm_config is not None else {}
         self.provider: Optional[BaseLLMProvider] = None
+
         self._load_provider()
 
     def _get_provider_class(self, provider_key: str) -> Type[BaseLLMProvider]:
+        """Dynamically imports and returns the provider class."""
         if provider_key not in PROVIDER_REGISTRY:
             raise ValueError(f"Unsupported LLM provider: {provider_key}. "
                              f"Available providers: {list(PROVIDER_REGISTRY.keys())}")
@@ -51,15 +78,27 @@ class LLMManager:
         except AttributeError:
             raise ImportError(f"Could not find class {class_name} in module {module_path_str}")
 
+
     def _load_provider(self):
+        """
+        Loads and instantiates the configured LLM provider using settings.
+        """
         provider_class = self._get_provider_class(self.provider_name)
+        
         current_provider_config = self.llm_config.copy()
 
         if self.provider_name == "open_webui":
-            if 'api_key' not in current_provider_config:
+            if 'api_key' not in current_provider_config: # Allow override from llm_config
                 current_provider_config['api_key'] = settings.OPEN_WEBUI_API_KEY
             if 'base_url' not in current_provider_config:
                 current_provider_config['base_url'] = settings.OPEN_WEBUI_BASE_URL
+        elif self.provider_name == "gemini": # ADDED ELIF FOR GEMINI
+            if 'api_key' not in current_provider_config:
+                current_provider_config['api_key'] = settings.GEMINI_API_KEY
+            # GeminiProvider doesn't require a base_url from us.
+            # It might take other specific params like 'safety_settings' via kwargs
+            if 'safety_settings' not in current_provider_config and hasattr(settings, 'GEMINI_SAFETY_SETTINGS'):
+                current_provider_config['safety_settings'] = settings.GEMINI_SAFETY_SETTINGS
         else:
             print(f"Warning: No specific global settings load path for provider '{self.provider_name}'. "
                   "Relying on llm_config passed to LLMManager or provider defaults.")
@@ -70,19 +109,19 @@ class LLMManager:
         except Exception as e:
             raise ValueError(f"Failed to instantiate LLM provider '{self.provider_name}': {e}")
 
+
     async def generate_code_modification(
         self,
         current_code: str, 
         model_name: str,   
-        prompt_instructions: str, # These instructions should now ask for a diff
+        prompt_instructions: str, 
         context_examples: Optional[List[Dict[str, str]]] = None, 
         temperature: float = 0.7,
         max_tokens: Optional[int] = 2048, 
         **kwargs: Any 
     ) -> str:
         """
-        Generates a code modification (expected as a diff string) from the configured LLM.
-        The prompt_instructions should guide the LLM to produce output in the SEARCH/REPLACE format.
+        Generates a code modification (expected as a diff string or full code) from the configured LLM.
         """
         if not self.provider:
             raise RuntimeError("LLM provider has not been initialized.")
@@ -91,16 +130,13 @@ class LLMManager:
         if context_examples:
             messages_for_provider.extend(context_examples)
         
-        # The prompt_instructions (from problem_config) should now include the request for diff format.
-        # current_code is provided for context.
         full_user_prompt = f"{prompt_instructions}\n\nHere is the current Python code to modify:\n```python\n{current_code}\n```"
         
         final_prompt_for_provider = full_user_prompt
         final_context_for_provider = messages_for_provider if messages_for_provider else None
         
         try:
-            # The response is expected to be a diff string
-            diff_string_response = await self.provider.generate_response(
+            response_string = await self.provider.generate_response(
                 prompt=final_prompt_for_provider, 
                 model_name=model_name, 
                 context=final_context_for_provider, 
@@ -108,9 +144,9 @@ class LLMManager:
                 max_tokens=max_tokens,
                 **kwargs
             )
-            return diff_string_response
+            return response_string
         except Exception as e:
-            print(f"Error during LLM diff generation via provider '{self.provider_name}': {e}")
+            print(f"Error during LLM generation via provider '{self.provider_name}': {e}")
             raise
 
     async def close_provider(self):
@@ -123,110 +159,66 @@ if __name__ == '__main__':
     
     try:
         from evocoder.config import settings 
-        from evocoder.utils.diff_utils import SEARCH_MARKER_START, SEARCH_MARKER_END, REPLACE_MARKER_END # For test instructions
     except ImportError as e:
         print(f"Failed to import modules for LLMManager test: {e}")
         sys.exit(1)
 
     async def main_test():
-        print("--- Testing LLMManager (Phase 2 - Requesting Diffs) ---")
+        print("--- Testing LLMManager (Phase 2 - With Gemini Provider Option) ---")
         
         if not hasattr(settings, 'DEFAULT_LLM_PROVIDER'):
             print("Error: 'settings' module does not seem to be loaded correctly for the test.")
             return
 
-        print(f"\nTesting with default provider: {settings.DEFAULT_LLM_PROVIDER}")
+        # Test 1: Default provider (OpenWebUI)
+        print(f"\nTesting with default provider from settings: {settings.DEFAULT_LLM_PROVIDER}")
+        manager_default = None
         if settings.DEFAULT_LLM_PROVIDER == "open_webui":
             if not settings.OPEN_WEBUI_API_KEY or \
                not settings.OPEN_WEBUI_BASE_URL or \
                not settings.OPEN_WEBUI_MODEL_NAME:
-                print("OpenWebUI settings (API_KEY, BASE_URL, MODEL_NAME) are not fully configured in .env.")
-                print("Skipping LLMManager live test with OpenWebUI.")
-                return
+                print("OpenWebUI settings not fully configured. Skipping default provider test.")
+            else:
+                try:
+                    manager_default = LLMManager() # Uses settings.DEFAULT_LLM_PROVIDER
+                    # ... (rest of the OpenWebUI test from previous version can be adapted here if desired) ...
+                    print(f"Successfully initialized LLMManager with OpenWebUI.")
+                except Exception as e:
+                    print(f"Error initializing LLMManager with OpenWebUI: {e}")
+                finally:
+                    if manager_default: await manager_default.close_provider()
         
-        manager = None
-        try:
-            manager = LLMManager() 
-            
-            test_parent_code = (
-                "def inefficient_sum(arr):\n"
-                "    s = 0\n"
-                "    # Start of loop\n"
-                "    for x in arr:\n"
-                "        s += x # Add item to sum\n"
-                "    # Another loop for no reason\n"
-                "    for y in arr:\n"
-                "        pass # This loop is redundant\n"
-                "    return s"
-            )
-            
-            # NEW: Instructions asking for diff output
-            test_instructions_for_diff = (
-                "You are an expert Python code optimizer. "
-                "Your task is to refactor the provided Python function `inefficient_sum` to be more efficient and concise. "
-                "Specifically, remove the redundant loop. "
-                f"Provide your changes as a diff in the following format ONLY:\n"
-                f"{SEARCH_MARKER_START}\n"
-                f"ORIGINAL_CODE_BLOCK_TO_REPLACE\n"
-                f"{SEARCH_MARKER_END}\n"
-                f"NEW_CODE_BLOCK\n"
-                f"{REPLACE_MARKER_END}\n"
-                "Do not add any explanations before or after the diff block. Ensure the search block matches exactly."
-            )
-            
-            inspiration_example_code = (
-                "def efficient_multiply(arr):\n"
-                "    p = 1\n"
-                "    for x in arr:\n"
-                "        p *= x\n"
-                "    return p"
-            )
-            inspiration_context = [{
-                "role": "user",
-                "content": f"Here's an example of a previously successful related code (scores: {{'efficiency': 10, 'lines': -3.0}}):\n```python\n{inspiration_example_code}\n```"
-            }]
-            
-            model_for_test = ""
-            if settings.DEFAULT_LLM_PROVIDER == "open_webui":
-                model_for_test = settings.OPEN_WEBUI_MODEL_NAME
-            
-            if not model_for_test:
-                print(f"Could not determine a model name for the default provider '{settings.DEFAULT_LLM_PROVIDER}' from settings.")
-                print("Skipping generation test.")
-                return
+        # Test 2: Specifically test GeminiProvider (mocked, as no live calls)
+        print(f"\nAttempting to initialize LLMManager with GeminiProvider (mocked test)...")
+        manager_gemini = None
+        if not settings.GEMINI_API_KEY:
+            print("GEMINI_API_KEY not set in .env. Cannot initialize GeminiProvider for this test.")
+        else:
+            try:
+                # We are testing if LLMManager can *instantiate* GeminiProvider.
+                # The GeminiProvider itself will use the API key for genai.configure().
+                # No actual API call will be made by this __main__ block for Gemini.
+                gemini_llm_config = {'api_key': settings.GEMINI_API_KEY} # Pass only necessary for init
+                manager_gemini = LLMManager(provider_name="gemini", llm_config=gemini_llm_config)
+                print(f"Successfully initialized LLMManager with GeminiProvider.")
+                
+                # Example of how one might call it (won't run an actual LLM call here)
+                # test_code = "def f(): return 1"
+                # test_instr = "Make this function return 2. Provide diff."
+                # gemini_model_for_test = getattr(settings, "GEMINI_MODEL_NAME", "gemini-1.5-pro-latest")
+                # print(f"If we were to call Gemini model '{gemini_model_for_test}' (not actually calling)...")
+                # This would require a running event loop and actual call, skip for now.
+                # diff = await manager_gemini.generate_code_modification(test_code, gemini_model_for_test, test_instr)
+                # print(f"Hypothetical diff: {diff}")
 
-            print(f"\nAttempting to generate code modification (as diff) for {settings.DEFAULT_LLM_PROVIDER} via LLMManager...")
-            print(f"Using model: {model_for_test}")
-            print(f"Parent code:\n```python\n{test_parent_code}\n```")
-            
-            llm_response_diff_string = await manager.generate_code_modification(
-                current_code=test_parent_code,
-                model_name=model_for_test, 
-                prompt_instructions=test_instructions_for_diff, # Use new instructions
-                context_examples=inspiration_context,
-                temperature=0.1, # Lower temperature for more deterministic diff generation
-                max_tokens=300 # Diffs can be short or long
-            )
-            print("\nLLM Response (Expected Diff String):")
-            print(llm_response_diff_string) # This should be the raw diff string
-
-            # For this standalone test, we won't apply the diff here.
-            # That will be the EvolutionaryController's job.
-            # We just want to see if the LLM attempts to produce the diff format.
-
-        except ValueError as ve:
-            print(f"ValueError during LLMManager test: {ve}")
-        except ImportError as ie:
-            print(f"ImportError during LLMManager test: {ie}")
-        except RuntimeError as re:
-            print(f"RuntimeError during LLMManager test: {re}")
-        except Exception as e:
-            print(f"An unexpected error occurred during LLMManager test: {e}")
-        finally:
-            if manager and hasattr(manager, 'provider') and manager.provider:
-                await manager.close_provider()
-            elif manager:
-                print("LLMManager was created but provider might not have been initialized or already closed.")
+            except ValueError as ve: # Catches init errors from GeminiProvider or LLMManager
+                print(f"ValueError during GeminiProvider initialization test: {ve}")
+            except ImportError as ie:
+                print(f"ImportError during GeminiProvider test: {ie}")
+            except Exception as e:
+                print(f"An unexpected error occurred during GeminiProvider test: {e}")
+            finally:
+                if manager_gemini: await manager_gemini.close_provider()
 
     if os.name == 'nt':
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())

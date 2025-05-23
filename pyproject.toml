@@ -10,9 +10,10 @@ packages = [{include = "evocoder", from = "."}] # Tells Poetry where the main pa
 [tool.poetry.dependencies]
 python = "^3.12" # Specifies Python 3.12 or newer
 python-dotenv = "^1.0.0" # For loading .env files
-httpx = "^0.27.0" # For making HTTP requests (to Open WebUI API)
+httpx = "^0.28.0" # For making HTTP requests (to Open WebUI API)
 typer = {extras = ["all"], version = "^0.12.3"} # For creating a nice CLI
 # asyncio is part of the standard library
+google-genai = "^1.16.0" # Or the latest version
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0" # For running tests
