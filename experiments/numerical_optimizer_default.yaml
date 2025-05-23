@@ -1,0 +1,31 @@
+# Experiment Configuration for Numerical Optimizer (Default settings)
+
+# --- Problem Definition ---
+problem_module: "evocoder.problems.numerical_optimizer.problem_config"
+
+# --- Evolutionary Parameters ---
+evolution_params:
+  num_generations: 3
+  population_size_per_gen: 5
+  num_inspirations: 1 # Number of inspiration programs to provide to the LLM
+  tournament_size_parent: 3 # Size of the tournament for parent selection
+  max_concurrent_tasks: 3 # Max parallel LLM/evaluation tasks
+
+# --- LLM Configuration ---
+llm_settings:
+  # provider: "open_webui" # If not set, will use DEFAULT_LLM_PROVIDER from .env/settings.py
+  # open_webui_model_name: "protected.Claude 3.7 Sonnet" # If not set, will use from .env/settings.py
+  
+  temperature: 0.1 # Good for diff generation, can be problem-specific
+  max_tokens_diff: 1024 # Max tokens specifically for diff generation context
+
+# --- Database Configuration (Optional) ---
+# If commented out, uses the default DB path from program_database.py (e.g., data/evocoder_programs.db)
+# To use a specific DB for this experiment run:
+# database_path: "data/experiments/numerical_optimizer_default_run.db"
+
+# --- Logging Configuration (Optional) ---
+# If commented out, uses global LOG_LEVEL and LOG_FILE_PATH from .env/settings.py
+# log_level: "DEBUG" 
+# log_file: "data/experiments/numerical_optimizer_default_run.log"
+
