@@ -2,80 +2,45 @@
 
 from typing import Dict, Any, Optional, List, Type
 import importlib
-import sys # For path manipulation if run as script
-from pathlib import Path # For path manipulation
+import sys 
+from pathlib import Path 
 
-# Attempt relative import for package use, fallback for direct script execution
 try:
     from ..config import settings
     from .base_llm_provider import BaseLLMProvider
 except ImportError:
-    # This block executes if the relative import fails (e.g., when run directly)
     if __name__ == '__main__':
-        # Adjust sys.path to allow absolute imports for the __main__ block
         file_path = Path(__file__).resolve()
-        # llm_manager.py is in evocoder/evocoder/llm_interface/
-        # project_root is 3 levels up from this file's directory
-        project_root = file_path.parent.parent.parent
+        project_root = file_path.parent.parent.parent 
         sys.path.insert(0, str(project_root))
         
         from evocoder.config import settings
         from evocoder.llm_interface.base_llm_provider import BaseLLMProvider
     else:
-        # If not __main__ and relative import failed, it's a genuine issue elsewhere
         raise
 
-
-# A registry to map provider names (from config) to their classes
-# This allows for easy extension with new providers.
 PROVIDER_REGISTRY: Dict[str, str] = {
     "open_webui": "evocoder.llm_interface.providers.open_webui_provider.OpenWebUIProvider",
-    # Add other providers here as they are implemented, e.g.:
-    # "gemini": "evocoder.llm_interface.providers.gemini_provider.GeminiProvider",
-    # "ollama_direct": "evocoder.llm_interface.providers.ollama_provider.OllamaProvider",
 }
 
 class LLMManager:
     """
     Manages the instantiation and interaction with a configured LLM provider.
-    This class acts as a factory and a unified interface for LLM operations.
     """
 
     def __init__(self, provider_name: Optional[str] = None, llm_config: Optional[Dict[str, Any]] = None):
-        """
-        Initializes the LLMManager.
-
-        It will select and instantiate an LLM provider based on the provided
-        `provider_name` or the `DEFAULT_LLM_PROVIDER` from settings.
-        Provider-specific configurations are also loaded from settings.
-
-        Args:
-            provider_name (Optional[str]): The name of the LLM provider to use (e.g., "open_webui").
-                                           If None, uses DEFAULT_LLM_PROVIDER from settings.
-            llm_config (Optional[Dict[str, Any]]): A dictionary containing specific configurations
-                                                   for the LLM provider (e.g., api_key, base_url, model_name).
-                                                   If None, attempts to load from global settings.
-        
-        Raises:
-            ValueError: If the specified provider is not supported or configuration is missing.
-            ImportError: If the provider class cannot be imported.
-        """
         self.provider_name = provider_name or settings.DEFAULT_LLM_PROVIDER
         self.llm_config = llm_config if llm_config is not None else {}
         self.provider: Optional[BaseLLMProvider] = None
-
         self._load_provider()
 
     def _get_provider_class(self, provider_key: str) -> Type[BaseLLMProvider]:
-        """Dynamically imports and returns the provider class."""
         if provider_key not in PROVIDER_REGISTRY:
             raise ValueError(f"Unsupported LLM provider: {provider_key}. "
                              f"Available providers: {list(PROVIDER_REGISTRY.keys())}")
         
         module_path_str, class_name = PROVIDER_REGISTRY[provider_key].rsplit('.', 1)
         try:
-            # importlib.import_module expects a string like 'evocoder.llm_interface.providers.open_webui_provider'
-            # This should work if the project root (containing the top-level 'evocoder' dir) is in sys.path
             module = importlib.import_module(module_path_str)
             provider_class = getattr(module, class_name)
             if not issubclass(provider_class, BaseLLMProvider):
@@ -86,13 +51,8 @@ class LLMManager:
         except AttributeError:
             raise ImportError(f"Could not find class {class_name} in module {module_path_str}")
 
-
     def _load_provider(self):
-        """
-        Loads and instantiates the configured LLM provider using settings.
-        """
         provider_class = self._get_provider_class(self.provider_name)
-        
         current_provider_config = self.llm_config.copy()
 
         if self.provider_name == "open_webui":
@@ -110,64 +70,67 @@ class LLMManager:
         except Exception as e:
             raise ValueError(f"Failed to instantiate LLM provider '{self.provider_name}': {e}")
 
-
     async def generate_code_modification(
         self,
         current_code: str, 
         model_name: str,   
-        prompt_instructions: str, 
+        prompt_instructions: str, # These instructions should now ask for a diff
         context_examples: Optional[List[Dict[str, str]]] = None, 
         temperature: float = 0.7,
         max_tokens: Optional[int] = 2048, 
         **kwargs: Any 
     ) -> str:
         """
-        Generates a code modification suggestion from the configured LLM.
-        (Args, Returns, Raises documentation remains the same)
+        Generates a code modification (expected as a diff string) from the configured LLM.
+        The prompt_instructions should guide the LLM to produce output in the SEARCH/REPLACE format.
         """
         if not self.provider:
             raise RuntimeError("LLM provider has not been initialized.")
-        
-        messages_context: List[Dict[str, str]] = []
+
+        messages_for_provider: List[Dict[str, str]] = []
         if context_examples:
-            messages_context.extend(context_examples)
+            messages_for_provider.extend(context_examples)
         
-        full_user_prompt = f"{prompt_instructions}\n\n```python\n{current_code}\n```"
+        # The prompt_instructions (from problem_config) should now include the request for diff format.
+        # current_code is provided for context.
+        full_user_prompt = f"{prompt_instructions}\n\nHere is the current Python code to modify:\n```python\n{current_code}\n```"
+        
+        final_prompt_for_provider = full_user_prompt
+        final_context_for_provider = messages_for_provider if messages_for_provider else None
         
         try:
-            return await self.provider.generate_response(
-                prompt=full_user_prompt,
+            # The response is expected to be a diff string
+            diff_string_response = await self.provider.generate_response(
+                prompt=final_prompt_for_provider, 
                 model_name=model_name, 
-                context=messages_context if messages_context else None,
+                context=final_context_for_provider, 
                 temperature=temperature,
                 max_tokens=max_tokens,
                 **kwargs
             )
+            return diff_string_response
         except Exception as e:
-            print(f"Error during LLM generation via provider '{self.provider_name}': {e}")
+            print(f"Error during LLM diff generation via provider '{self.provider_name}': {e}")
             raise
 
-
     async def close_provider(self):
-        """Closes any open connections or resources held by the LLM provider."""
         if self.provider:
             await self.provider.close()
-            # print(f"LLM provider '{self.provider_name}' connection closed.") # Quieter
-
 
 if __name__ == '__main__':
     import asyncio
-    import os # For os.name check
-    # sys and Path are already imported at the top if this block is reached due to ImportError
-
-    # The sys.path modification for `settings` and `BaseLLMProvider` is handled
-    # by the try-except block at the very top of the file when run as __main__.
-    # So, `settings` and `BaseLLMProvider` should be available here.
+    import os 
+    
+    try:
+        from evocoder.config import settings 
+        from evocoder.utils.diff_utils import SEARCH_MARKER_START, SEARCH_MARKER_END, REPLACE_MARKER_END # For test instructions
+    except ImportError as e:
+        print(f"Failed to import modules for LLMManager test: {e}")
+        sys.exit(1)
 
     async def main_test():
-        print("--- Testing LLMManager ---")
+        print("--- Testing LLMManager (Phase 2 - Requesting Diffs) ---")
         
-        # Ensure settings were loaded (they are used implicitly by LLMManager constructor)
         if not hasattr(settings, 'DEFAULT_LLM_PROVIDER'):
             print("Error: 'settings' module does not seem to be loaded correctly for the test.")
             return
@@ -181,38 +144,75 @@ if __name__ == '__main__':
                 print("Skipping LLMManager live test with OpenWebUI.")
                 return
         
-        manager = None # Define manager outside try block for finally
+        manager = None
         try:
-            manager = LLMManager() # Uses DEFAULT_LLM_PROVIDER from settings
+            manager = LLMManager() 
             
-            test_code = "def hello():\n    print('Hello world!')\n    # A redundant line\n    return None"
-            test_instructions = "Optimize the following Python function to be more concise. Remove redundant lines. Return the full modified function."
+            test_parent_code = (
+                "def inefficient_sum(arr):\n"
+                "    s = 0\n"
+                "    # Start of loop\n"
+                "    for x in arr:\n"
+                "        s += x # Add item to sum\n"
+                "    # Another loop for no reason\n"
+                "    for y in arr:\n"
+                "        pass # This loop is redundant\n"
+                "    return s"
+            )
             
-            # Determine the model name to use from settings, specific to the default provider
+            # NEW: Instructions asking for diff output
+            test_instructions_for_diff = (
+                "You are an expert Python code optimizer. "
+                "Your task is to refactor the provided Python function `inefficient_sum` to be more efficient and concise. "
+                "Specifically, remove the redundant loop. "
+                f"Provide your changes as a diff in the following format ONLY:\n"
+                f"{SEARCH_MARKER_START}\n"
+                f"ORIGINAL_CODE_BLOCK_TO_REPLACE\n"
+                f"{SEARCH_MARKER_END}\n"
+                f"NEW_CODE_BLOCK\n"
+                f"{REPLACE_MARKER_END}\n"
+                "Do not add any explanations before or after the diff block. Ensure the search block matches exactly."
+            )
+            
+            inspiration_example_code = (
+                "def efficient_multiply(arr):\n"
+                "    p = 1\n"
+                "    for x in arr:\n"
+                "        p *= x\n"
+                "    return p"
+            )
+            inspiration_context = [{
+                "role": "user",
+                "content": f"Here's an example of a previously successful related code (scores: {{'efficiency': 10, 'lines': -3.0}}):\n```python\n{inspiration_example_code}\n```"
+            }]
+            
             model_for_test = ""
             if settings.DEFAULT_LLM_PROVIDER == "open_webui":
                 model_for_test = settings.OPEN_WEBUI_MODEL_NAME
-            # Add elif for other default providers if necessary
             
             if not model_for_test:
                 print(f"Could not determine a model name for the default provider '{settings.DEFAULT_LLM_PROVIDER}' from settings.")
                 print("Skipping generation test.")
                 return
 
-            print(f"\nAttempting to generate code modification for {settings.DEFAULT_LLM_PROVIDER} via LLMManager...")
+            print(f"\nAttempting to generate code modification (as diff) for {settings.DEFAULT_LLM_PROVIDER} via LLMManager...")
             print(f"Using model: {model_for_test}")
+            print(f"Parent code:\n```python\n{test_parent_code}\n```")
             
-            modified_code = await manager.generate_code_modification(
-                current_code=test_code,
+            llm_response_diff_string = await manager.generate_code_modification(
+                current_code=test_parent_code,
                 model_name=model_for_test, 
-                prompt_instructions=test_instructions,
-                temperature=0.2,
-                max_tokens=100
+                prompt_instructions=test_instructions_for_diff, # Use new instructions
+                context_examples=inspiration_context,
+                temperature=0.1, # Lower temperature for more deterministic diff generation
+                max_tokens=300 # Diffs can be short or long
             )
-            print("\nLLM Response (Modified Code Suggestion):")
-            print("```python")
-            print(modified_code)
-            print("```")
+            print("\nLLM Response (Expected Diff String):")
+            print(llm_response_diff_string) # This should be the raw diff string
+
+            # For this standalone test, we won't apply the diff here.
+            # That will be the EvolutionaryController's job.
+            # We just want to see if the LLM attempts to produce the diff format.
 
         except ValueError as ve:
             print(f"ValueError during LLMManager test: {ve}")
@@ -223,9 +223,9 @@ if __name__ == '__main__':
         except Exception as e:
             print(f"An unexpected error occurred during LLMManager test: {e}")
         finally:
-            if manager and hasattr(manager, 'provider') and manager.provider: # Check if provider was initialized
+            if manager and hasattr(manager, 'provider') and manager.provider:
                 await manager.close_provider()
-            elif manager : # Manager was created but provider might not have been
+            elif manager:
                 print("LLMManager was created but provider might not have been initialized or already closed.")
 
     if os.name == 'nt':
