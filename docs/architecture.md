@@ -1,7 +1,9 @@
 # EvoCoder - Architecture Overview
+
 This document provides a more detailed look into the architecture of the EvoCoder system, outlining its major components and how they interact to achieve evolutionary code generation.
 
 ## Core Philosophy
+
 EvoCoder is designed as a modular and extensible framework. The core idea is to separate concerns:
 
 - Problem Definition: What code to evolve and how to measure its success.
@@ -16,10 +18,11 @@ EvoCoder is designed as a modular and extensible framework. The core idea is to 
 
 - Configuration: Managing settings for experiments and global parameters.
 
-# Major Components and Data Flow
+## Major Components and Data Flow
+
 The system revolves around several key Python modules and a defined workflow:
 
-1. main.py (Command-Line Interface - CLI)
+1. `main.py` (Command-Line Interface - CLI)
 
     - Role: Serves as the primary user entry point. It uses Typer for a structured CLI.
 
@@ -29,7 +32,7 @@ The system revolves around several key Python modules and a defined workflow:
 
         - Loads experiment configurations from specified YAML files (evocoder/experiments/).
 
-        - Initializes global settings (e.g., from .env via evocoder/config/settings.py).
+        - Initializes global settings (e.g., from `.env` via `evocoder/config/settings.py`).
 
         - Instantiates and invokes the EvolutionaryController to start an evolutionary run.
 
@@ -37,7 +40,7 @@ The system revolves around several key Python modules and a defined workflow:
 
     - Interaction: Takes user input and experiment config, then delegates to EvolutionaryController.
 
-2. Experiment Configuration (YAML files in evocoder/experiments/)
+2. Experiment Configuration (YAML files in `evocoder/experiments/`)
 
     - Role: Defines all parameters for a specific evolutionary run.
 
@@ -61,7 +64,7 @@ The system revolves around several key Python modules and a defined workflow:
 
     - Interaction: Provides fallback settings if not specified in an experiment's YAML file. Used by LLMManager and potentially other components for default behaviors.
 
-4. evocoder/core/EvolutionaryController.py (EvolutionaryController class)
+4. `evocoder/core/EvolutionaryController.py` (EvolutionaryController class)
 
     - Role: The central orchestrator of the evolutionary process.
 
@@ -77,7 +80,7 @@ The system revolves around several key Python modules and a defined workflow:
 
         - Variation: Coordinates with LLMManager to generate code modifications (diffs) for selected parent programs, providing context (parent code, inspiration programs, problem-specific instructions).
 
-        - Modification Application: Uses diff_utils.py to apply LLM-generated diffs to parent code.
+        - Modification Application: Uses `diff_utils.py` to apply LLM-generated diffs to parent code.
 
         - Evaluation Trigger: Sends the newly generated/modified code to the Evaluator.
 
@@ -93,43 +96,43 @@ The system revolves around several key Python modules and a defined workflow:
 
     - Key Files:
 
-        - problem_config.py: Contains problem-specific metadata: PROBLEM_NAME, TARGET_FUNCTION_NAME, paths to INITIAL_CODE_FILE and TEST_SUITE_FILE, EVALUATION_METRICS (including goals like "maximize"/"minimize"), PRIMARY_METRIC, CORRECTNESS_THRESHOLD, detailed PROBLEM_LLM_INSTRUCTIONS (including diff format guidance), and the EVALUATION_CASCADE definition.
+        - `problem_config.py:` Contains problem-specific metadata: `PROBLEM_NAME`, `TARGET_FUNCTION_NAME`, paths to `INITIAL_CODE_FILE` and `TEST_SUITE_FILE`, `EVALUATION_METRICS` (including goals like "maximize"/"minimize"), `PRIMARY_METRIC`, `CORRECTNESS_THRESHOLD`, detailed `PROBLEM_LLM_INSTRUCTIONS` (including diff format guidance), and the `EVALUATION_CASCADE` definition.
 
-        - initial_code.py: The starting Python code that will be evolved.
+        - `initial_code.py`: The starting Python code that will be evolved.
 
-        - test_suite.py: pytest-compatible tests used by the Evaluator. Tests can be marked with pytest markers (e.g., @pytest.mark.correctness, @pytest.mark.precision) to be run in specific stages of the evaluation cascade.
+        - `test_suite.py`: pytest-compatible tests used by the Evaluator. Tests can be marked with pytest markers (e.g., `@pytest.mark.correctness`, `@pytest.mark.precision`) to be run in specific stages of the evaluation cascade.
 
-    - Interaction: The problem_config.py is loaded by EvolutionaryController to configure the run. initial_code.py provides the seed. test_suite.py is used by the Evaluator.
+    - Interaction: The `problem_config.py` is loaded by EvolutionaryController to configure the run. `initial_code.py` provides the seed. `test_suite.py` is used by the Evaluator.
 
 6. `evocoder/llm_interface/` (LLM Interaction Layer)
 
-    - BaseLLMProvider.py (BaseLLMProvider class): An abstract base class defining the common interface for all LLM providers (e.g., an async def generate_response(...) method).
+    - `BaseLLMProvider.py` (BaseLLMProvider class): An abstract base class defining the common interface for all LLM providers (e.g., an async def generate_response(...) method).
 
-    - providers/<provider_name>_provider.py (e.g., OpenWebUIProvider.py): Concrete implementations of BaseLLMProvider for specific LLM services or APIs. They handle API-specific authentication, request formatting, and response parsing.
+    - `providers/<provider_name>_provider.py` (e.g., OpenWebUIProvider.py): Concrete implementations of BaseLLMProvider for specific LLM services or APIs. They handle API-specific authentication, request formatting, and response parsing.
 
-    - LLMManager.py (LLMManager class):
+    - `LLMManager.py` (LLMManager class):
 
         - Acts as a factory and a unified interface to the selected LLM provider.
 
         - Dynamically loads and instantiates the configured provider based on PROVIDER_REGISTRY and settings (from experiment config or global settings).
 
-        - The generate_code_modification method constructs the final prompt (including parent code, inspiration examples, and problem-specific instructions asking for diffs) and calls the active provider's generate_response method.
+        - The `generate_code_modification` method constructs the final prompt (including parent code, inspiration examples, and problem-specific instructions asking for diffs) and calls the active provider's generate_response method.
 
-    - Interaction: EvolutionaryController uses LLMManager to abstract away LLM provider details. LLMManager uses a specific provider instance to make API calls.
+    - Interaction: `EvolutionaryController` uses LLMManager to abstract away LLM provider details. LLMManager uses a specific provider instance to make API calls.
 
-7. evocoder/utils/diff_utils.py
+7. `evocoder/utils/diff_utils.py`
 
     - Role: Provides utilities for handling code modifications in diff format.
 
     - Functionality:
 
-        - parse_diff_string(): Parses a string containing one or more SEARCH/REPLACE diff blocks into DiffBlock objects.
+        - `parse_diff_string()`: Parses a string containing one or more SEARCH/REPLACE diff blocks into DiffBlock objects.
 
-        - apply_diffs(): Applies a list of DiffBlock objects to an original code string to produce the modified code.
+        - `apply_diffs()`: Applies a list of DiffBlock objects to an original code string to produce the modified code.
 
     - Interaction: Used by EvolutionaryController after receiving a diff string from the LLMManager.
 
-8. evocoder/core/evaluator_cascade.py (Evaluator class)
+8. `evocoder/core/evaluator_cascade.py` (Evaluator class)
 
     - Role: Evaluates the functional correctness and other quality metrics of a given code string.
 
@@ -143,21 +146,21 @@ The system revolves around several key Python modules and a defined workflow:
 
             - Creates a temporary, isolated environment.
 
-            - Writes the evolved code to a temporary module (evolved_module.py).
+            - Writes the evolved code to a temporary module (`evolved_module.py`).
 
-            - Copies and modifies the problem's test_suite.py to import from this temporary module.
+            - Copies and modifies the problem's `test_suite.py` to import from this temporary module.
 
-            - Runs pytest programmatically (as a subprocess for isolation, using asyncio.to_thread) on the modified test suite, potentially filtering tests by markers specified in the cascade stage.
+            - Runs pytest programmatically (as a subprocess for isolation, using `asyncio.to_thread`) on the modified test suite, potentially filtering tests by markers specified in the cascade stage.
 
             - Parses pytest output to determine pass/fail counts.
 
-            - Handles fail_fast_if_not_all_passed logic for cascade stages.
+            - Handles `fail_fast_if_not_all_passed` logic for cascade stages.
 
         - Calculates and returns a dictionary of scores based on the outcomes of the cascade stages and other direct measurements (like line count via AST parsing using _count_function_lines).
 
-    - Interaction: Called by EvolutionaryController with the evolved code string and problem configuration.
+    - Interaction: Called by `EvolutionaryController` with the evolved code string and problem configuration.
 
-9. evocoder/core/program_database.py (ProgramDatabase class)
+9. `evocoder/core/program_database.py` (ProgramDatabase class)
 
     - Role: Manages persistence of programs and their associated data.
 
@@ -171,7 +174,7 @@ The system revolves around several key Python modules and a defined workflow:
 
     - Interaction: Used by EvolutionaryController to store new individuals and to retrieve candidates for selection (parents, inspirations).
 
-10. evocoder/utils/logger.py
+10. `evocoder/utils/logger.py`
 
     - Role: Provides a centralized and configurable logging setup using Python's standard logging module.
 
@@ -180,6 +183,7 @@ The system revolves around several key Python modules and a defined workflow:
     - Interaction: Imported and used by all major components (EvolutionaryController, LLMManager, Evaluator, ProgramDatabase, main.py) for logging messages.
 
 ## Data Flow Summary (Evolutionary Loop)
+
 1. EvolutionaryController fetches a diverse pool of candidate programs (best, random correct, recent) from ProgramDatabase.
 
 2. From this pool, a parent program is selected using tournament selection (correctness first, then primary metric). Inspiration programs are also selected.
@@ -190,7 +194,7 @@ The system revolves around several key Python modules and a defined workflow:
 
 5. The LLM returns a diff string.
 
-6. EvolutionaryController uses diff_utils.apply_diffs to apply the diff to the parent code, creating the evolved code string.
+6. EvolutionaryController uses `diff_utils.apply_diffs` to apply the diff to the parent code, creating the evolved code string.
 
 7. The evolved code string is passed to the Evaluator.
 
