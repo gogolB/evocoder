@@ -2,7 +2,7 @@
 name = "evocoder"
 version = "0.1.0"
 description = "An AI agent inspired by AlphaEvolve to iteratively evolve code solutions using LLMs."
-authors = ["Your Name <you@example.com>"] # Replace with your details
+authors = ["Gogol B <gogolb@tamu.edu>"] # Replace with your details
 readme = "README.md"
 license = "MIT" # Or your preferred license
 packages = [{include = "evocoder", from = "."}] # Tells Poetry where the main package is
