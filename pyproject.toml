@@ -2,18 +2,17 @@
 name = "evocoder"
 version = "0.1.0"
 description = "An AI agent inspired by AlphaEvolve to iteratively evolve code solutions using LLMs."
-authors = ["Gogol B <gogolb@tamu.edu>"] # Replace with your details
+authors = ["Gogol B <gogolb@tamu.edu>"] 
 readme = "README.md"
-license = "MIT" # Or your preferred license
-packages = [{include = "evocoder", from = "."}] # Tells Poetry where the main package is
-
+license = "MIT" 
+packages = [{include = "evocoder", from = "."}]
 [tool.poetry.dependencies]
-python = "^3.12" # Specifies Python 3.12 or newer
+python = "^3.12" 
 python-dotenv = "^1.0.0" # For loading .env files
 httpx = "^0.28.0" # For making HTTP requests (to Open WebUI API)
 typer = {extras = ["all"], version = "^0.12.3"} # For creating a nice CLI
 # asyncio is part of the standard library
-google-genai = "^1.16.0" # Or the latest version
+google-genai = "^1.16.0" 
 PyYAML = "^6.0" # For YAML parsing
 
 [tool.poetry.group.dev.dependencies]
